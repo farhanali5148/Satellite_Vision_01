@@ -1,0 +1,351 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Orbital Health Monitor</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&family=Space+Grotesk:wght@500;700&display=swap">
+<style>
+body{margin:0}
+/* Layout: crew strip on top, readiness summary + five domain cards on the left, ranked actions + daily check-in on the right. */
+:root{
+  --bg:#f3f6f8; --surface:#ffffff; --ink:#122029; --muted:#586a77; --line:#d8e0e6;
+  --accent:#0a6b87; --accent-ink:#ffffff;
+  --ok:#1b7a4e; --ok-bg:#e2f3ea; --warn:#9a5b00; --warn-bg:#fbefd6; --crit:#b3261e; --crit-bg:#fbe3e1;
+  --font-display:"Space Grotesk",system-ui,sans-serif; --font-body:"Inter",system-ui,sans-serif; --font-data:"JetBrains Mono",ui-monospace,monospace;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#0b141b; --surface:#121d26; --ink:#e5ecf1; --muted:#8ea0ad; --line:#263845;
+  --accent:#4cc2e0; --accent-ink:#06222b;
+  --ok:#5fd09a; --ok-bg:#12332a; --warn:#f0b24a; --warn-bg:#3a2c10; --crit:#ff7b72; --crit-bg:#431a19; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#0b141b; --surface:#121d26; --ink:#e5ecf1; --muted:#8ea0ad; --line:#263845;
+  --accent:#4cc2e0; --accent-ink:#06222b;
+  --ok:#5fd09a; --ok-bg:#12332a; --warn:#f0b24a; --warn-bg:#3a2c10; --crit:#ff7b72; --crit-bg:#431a19; color-scheme:dark}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--ink);font-family:var(--font-body);font-size:14px;line-height:1.5;
+  padding-block:20px 40px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+.wrap{max-width:1200px;margin:0 auto;display:flex;flex-direction:column;gap:16px}
+h1,h2,h3{font-family:var(--font-display);margin:0;text-wrap:balance}
+button{font:inherit;color:inherit;cursor:pointer}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.num{font-family:var(--font-data);font-variant-numeric:tabular-nums}
+
+header{display:flex;flex-wrap:wrap;gap:12px 24px;align-items:flex-end;justify-content:space-between}
+.brand .team{font-size:12px;letter-spacing:.12em;text-transform:uppercase;color:var(--accent);font-weight:600}
+.brand h1{font-size:28px;line-height:1.15}
+.brand p{margin:4px 0 0;color:var(--muted);max-width:60ch}
+.tools{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.tools label{font-size:12px;color:var(--muted)}
+select,.btn{background:var(--surface);border:1px solid var(--line);border-radius:6px;padding:7px 10px;font:inherit;color:var(--ink)}
+.btn:hover,select:hover{border-color:var(--accent)}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:var(--accent-ink);font-weight:600}
+.sim{font-size:12px;background:var(--warn-bg);color:var(--warn);border-radius:4px;padding:2px 8px;font-weight:600}
+
+#crew{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}
+.crewbtn{display:flex;flex-direction:column;gap:2px;text-align:left;background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:10px 12px;min-width:0}
+.crewbtn[aria-pressed="true"]{border-color:var(--accent);box-shadow:inset 0 0 0 1px var(--accent)}
+.crewbtn .nm{font-weight:600;overflow-wrap:anywhere}
+.crewbtn .rl{font-size:12px;color:var(--muted)}
+.crewbtn .row{display:flex;justify-content:space-between;align-items:center;gap:8px;margin-top:6px}
+.score{font-family:var(--font-data);font-size:20px;font-weight:500}
+
+.pill{display:inline-block;font-size:11px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;border-radius:4px;padding:1px 7px;white-space:nowrap}
+.pill.ok{background:var(--ok-bg);color:var(--ok)} .pill.watch{background:var(--warn-bg);color:var(--warn)} .pill.act{background:var(--crit-bg);color:var(--crit)}
+.c-ok{color:var(--ok)} .c-watch{color:var(--warn)} .c-act{color:var(--crit)}
+
+.grid{display:grid;grid-template-columns:minmax(0,1fr) 360px;gap:16px;align-items:start}
+.left,.right{display:flex;flex-direction:column;gap:16px;min-width:0}
+.panel{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:16px}
+.panel h2{font-size:17px}
+.panel .sub{color:var(--muted);font-size:13px;margin:2px 0 0}
+
+#summary{display:flex;flex-wrap:wrap;gap:16px 32px;align-items:center}
+.big{display:flex;align-items:baseline;gap:10px}
+.big .n{font-family:var(--font-data);font-size:56px;line-height:1;font-weight:500}
+.big .l{font-family:var(--font-display);font-size:18px;font-weight:700}
+.chips{display:flex;flex-wrap:wrap;gap:8px}
+.chip{border:1px solid var(--line);border-radius:6px;padding:6px 10px;min-width:96px}
+.chip .t{font-size:12px;color:var(--muted)}
+.chip .v{font-family:var(--font-data);font-size:16px}
+
+#domains{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:16px}
+.dom header{align-items:flex-start;margin-bottom:8px}
+.dom h3{font-size:16px}
+.dom .hint{font-size:12px;color:var(--muted);margin:0}
+.m{display:grid;grid-template-columns:minmax(0,1fr) auto 96px;gap:4px 10px;align-items:center;padding:9px 0;border-top:1px solid var(--line)}
+.m .lab{font-weight:500;min-width:0;overflow-wrap:anywhere}
+.m .base{font-size:12px;color:var(--muted)}
+.m .val{text-align:right;font-family:var(--font-data);font-variant-numeric:tabular-nums;font-size:16px;white-space:nowrap}
+.m .val small{font-size:11px;color:var(--muted)}
+.m .dl{grid-column:1 / 3;font-size:12px}
+.m svg{grid-column:3;grid-row:1 / 3;width:96px;height:34px}
+.dose-bar{margin-top:8px;font-size:12px;color:var(--muted)}
+.dose-bar .track{height:6px;background:var(--line);border-radius:3px;overflow:hidden;margin-top:4px}
+.dose-bar .fill{height:100%;background:var(--accent)}
+
+#actions ol{list-style:none;margin:12px 0 0;padding:0;display:flex;flex-direction:column;gap:10px}
+#actions li{border:1px solid var(--line);border-radius:8px;padding:10px 12px}
+#actions li.act{border-color:var(--crit)}
+#actions .top{display:flex;justify-content:space-between;gap:8px;align-items:center;margin-bottom:4px}
+#actions .what{font-weight:600}
+#actions p{margin:0}
+#actions .esc{margin-top:6px;font-size:12px;color:var(--muted)}
+.empty{margin:12px 0 0;color:var(--ok);font-weight:500}
+.autonomy{font-size:12px;background:var(--bg);border-radius:6px;padding:8px 10px;margin-top:12px;color:var(--muted)}
+
+form .f{display:grid;grid-template-columns:110px minmax(0,1fr) 52px;gap:8px;align-items:center;margin-top:10px}
+form label{font-size:13px}
+form input[type=range]{width:100%;accent-color:var(--accent)}
+form output{font-family:var(--font-data);text-align:right}
+form .btn{margin-top:14px;width:100%}
+details{font-size:13px;color:var(--muted)} details summary{cursor:pointer;color:var(--ink);font-weight:500}
+details ul{margin:8px 0 0;padding-left:18px}
+footer{font-size:12px;color:var(--muted);max-width:90ch}
+
+@media (max-width:900px){.grid{grid-template-columns:minmax(0,1fr)} #crew{grid-template-columns:repeat(2,1fr)}}
+@media (max-width:420px){.big .n{font-size:44px} form .f{grid-template-columns:90px minmax(0,1fr) 44px}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="brand">
+      <div class="team">Satellite Vision · NASA Space Apps 2026</div>
+      <h1>Orbital Health Monitor</h1>
+      <p>Crew health indicators in one view, scored against each astronaut's own pre-flight baseline, with clear next steps when ground support is far away.</p>
+    </div>
+    <div class="tools">
+      <span class="sim">Simulated crew data</span>
+      <label for="comms">Link to ground</label>
+      <select id="comms">
+        <option value="leo">Low Earth orbit (real time)</option>
+        <option value="moon">Lunar (about 1.3 s one way)</option>
+        <option value="mars">Mars transit (up to 22 min one way)</option>
+      </select>
+    </div>
+  </header>
+
+  <div id="crew" role="group" aria-label="Crew members"></div>
+
+  <div class="grid">
+    <div class="left">
+      <section class="panel" id="summary" aria-live="polite"></section>
+      <div id="domains"></div>
+    </div>
+    <aside class="right">
+      <section class="panel" id="actions" aria-live="polite"></section>
+      <section class="panel">
+        <h2>Daily check-in</h2>
+        <p class="sub">Log today's self-reported values for the selected astronaut.</p>
+        <form id="checkin">
+          <div class="f"><label for="f-sleep">Sleep (h)</label><input id="f-sleep" type="range" min="3" max="10" step="0.5"><output id="o-sleep" for="f-sleep"></output></div>
+          <div class="f"><label for="f-mood">Mood (1–5)</label><input id="f-mood" type="range" min="1" max="5" step="0.5"><output id="o-mood" for="f-mood"></output></div>
+          <div class="f"><label for="f-stress">Stress (1–5)</label><input id="f-stress" type="range" min="1" max="5" step="0.5"><output id="o-stress" for="f-stress"></output></div>
+          <div class="f"><label for="f-exercise">Exercise (min)</label><input id="f-exercise" type="range" min="0" max="240" step="10"><output id="o-exercise" for="f-exercise"></output></div>
+          <div class="f"><label for="f-temp">Temp (°C)</label><input id="f-temp" type="range" min="35.5" max="38.5" step="0.1"><output id="o-temp" for="f-temp"></output></div>
+          <div class="f"><label for="f-backpain">Back pain (0–10)</label><input id="f-backpain" type="range" min="0" max="10" step="0.5"><output id="o-backpain" for="f-backpain"></output></div>
+          <button class="btn primary" type="submit">Log check-in as next day</button>
+        </form>
+      </section>
+      <section class="panel">
+        <h2>Scenario tools</h2>
+        <p class="sub">Try how the dashboard reacts.</p>
+        <div style="display:flex;flex-direction:column;gap:8px;margin-top:10px">
+          <button class="btn" id="spe" type="button">Simulate solar particle event</button>
+          <button class="btn" id="reset" type="button">Reset to starting data</button>
+        </div>
+        <details style="margin-top:14px"><summary>How scoring works</summary>
+          <ul>
+            <li>Each indicator is compared with that astronaut's pre-flight baseline, in the direction that matters for that indicator.</li>
+            <li>Within the watch threshold scores stay at 85–100. Past it the score falls through Watch (55–85) into Act (below 55).</li>
+            <li>A domain score blends the average with the worst indicator, so one bad signal is not hidden by good ones.</li>
+          </ul>
+        </details>
+      </section>
+    </aside>
+  </div>
+
+  <footer>Prototype for decision support on simulated data. It is not a medical device. Thresholds are illustrative and would be set with flight surgeons for a real mission.</footer>
+</div>
+
+<script>
+const N = 14;
+const LV = ["ok","watch","act"], LVL = ["Nominal","Watch","Act"];
+const DOMAINS = [
+  {id:"radiation", name:"Radiation", hint:"Space radiation exposure"},
+  {id:"cardio", name:"Cardiovascular", hint:"Heart and circulation in altered gravity"},
+  {id:"musculo", name:"Bone and muscle", hint:"Countermeasure exercise and load"},
+  {id:"immune", name:"Immune and infection", hint:"Early signs of illness"},
+  {id:"behavior", name:"Behavioral health", hint:"Sleep, mood and performance in isolation"}
+];
+const METRICS = [
+  {id:"dose",domain:"radiation",label:"Dose rate",unit:"mSv/day",base:1.4,bad:"high",warn:.25,crit:.6,noise:.04,dec:2,min:0},
+  {id:"hr",domain:"cardio",label:"Resting heart rate",unit:"bpm",base:62,bad:"both",warn:.1,crit:.2,noise:.03,dec:0},
+  {id:"hrv",domain:"cardio",label:"HRV (RMSSD)",unit:"ms",base:55,bad:"low",warn:.2,crit:.35,noise:.06,dec:0},
+  {id:"sbp",domain:"cardio",label:"Systolic blood pressure",unit:"mmHg",base:118,bad:"high",warn:.08,crit:.15,noise:.02,dec:0},
+  {id:"exercise",domain:"musculo",label:"Exercise",unit:"min/day",base:150,bad:"low",warn:.2,crit:.4,noise:.05,dec:0,min:0,max:240},
+  {id:"compliance",domain:"musculo",label:"Resistive protocol done",unit:"%",base:95,bad:"low",warn:.08,crit:.16,noise:.02,dec:0,max:100},
+  {id:"backpain",domain:"musculo",label:"Back pain",unit:"/10",base:2,bad:"high",warn:.5,crit:1,noise:.1,dec:1,min:0,max:10},
+  {id:"temp",domain:"immune",label:"Body temperature",unit:"°C",base:36.7,bad:"high",warn:.009,crit:.014,noise:.002,dec:1},
+  {id:"spo2",domain:"immune",label:"Blood oxygen",unit:"%",base:97,bad:"low",warn:.01,crit:.02,noise:.003,dec:1,max:100},
+  {id:"crp",domain:"immune",label:"Inflammation (CRP)",unit:"mg/L",base:1,bad:"high",warn:.5,crit:1.5,noise:.1,dec:1,min:0},
+  {id:"sleep",domain:"behavior",label:"Sleep",unit:"h",base:7,bad:"low",warn:.12,crit:.25,noise:.05,dec:1,min:0,max:12},
+  {id:"mood",domain:"behavior",label:"Mood",unit:"/5",base:4,bad:"low",warn:.15,crit:.3,noise:.04,dec:1,min:1,max:5},
+  {id:"stress",domain:"behavior",label:"Stress",unit:"/5",base:2,bad:"high",warn:.3,crit:.6,noise:.08,dec:1,min:1,max:5},
+  {id:"rt",domain:"behavior",label:"Reaction time (PVT)",unit:"ms",base:260,bad:"high",warn:.1,crit:.2,noise:.025,dec:0}
+];
+const ACTIONS = {
+  dose:[`Dose rate is above baseline. Limit time in lightly shielded areas and check the space weather bulletin.`,`Dose rate is high. Move to the best-shielded module until it falls, log shelter time, and report the event.`],
+  hr:[`Resting heart rate has moved from baseline. Recheck after 10 minutes seated and review hydration and sleep.`,`Resting heart rate is far from baseline. Repeat the measurement, record symptoms, and request a medical review.`],
+  hrv:[`HRV is trending down, a sign of load or poor recovery. Add a rest block and protect sleep.`,`HRV is sharply down. Reduce workload today and request a medical review if it stays low for 48 hours.`],
+  sbp:[`Blood pressure is above baseline. Retake it seated after 5 minutes of rest.`,`Blood pressure is high on this reading. Retake it twice, log symptoms, and request a medical review.`],
+  exercise:[`Exercise time is below target. Schedule the missed session in the next 24 hours to protect bone and muscle.`,`Exercise has dropped well below target. Make the resistive session the first task tomorrow and tell the crew medical officer.`],
+  compliance:[`Resistive sessions are being cut short. Finish the full protocol to slow bone and muscle loss.`,`The resistive protocol is largely missed. Check the equipment and schedule, and report to ground.`],
+  backpain:[`Back pain is rising. Check posture during exercise and rest, and review the stretching routine.`,`Back pain is high. Pause heavy resistive loads, log location and severity, and request a medical review.`],
+  temp:[`Body temperature is slightly raised. Recheck in 2 hours and drink extra fluids.`,`Body temperature is raised. Recheck, keep distance from crewmates if symptoms appear, and request a medical review.`],
+  spo2:[`Blood oxygen is a little low. Recheck with a warm finger and confirm cabin air readings.`,`Blood oxygen is low. Check cabin CO2 and O2 levels now, then request a medical review.`],
+  crp:[`The inflammation marker is up. Log symptoms and repeat the test in 24 hours.`,`The inflammation marker is high. Repeat the test, check temperature, and request a medical review.`],
+  sleep:[`Sleep is below baseline. Keep the lights-out schedule and cut screen time before bed.`,`Sleep is far too short. Ask the commander to lighten tomorrow's schedule and review the sleep plan with ground.`],
+  mood:[`Mood is lower than usual. Schedule a call with family or a crewmate and keep the daily routine.`,`Mood is low. Talk to the crew medical officer and ask for a behavioral health check-in.`],
+  stress:[`Stress is above baseline. Try a paced-breathing session and block 30 minutes of personal time.`,`Stress is high. Reduce today's task load and ask for a behavioral health check-in.`],
+  rt:[`Reaction time is slower, which suggests fatigue. Delay critical tasks until after rest.`,`Reaction time is much slower. Avoid safety-critical operations and have a crewmate verify your work.`]
+};
+const CREW = [
+  {id:"okafor",name:"Farhan Ali",role:"Commander",prior:210,drift:{}},
+  {id:"tanaka",name:"Muhammad Arqam",role:"Flight engineer",prior:195,drift:{sleep:-.28,mood:-.22,stress:.5,rt:.12,hrv:-.2}},
+  {id:"rivera",name:"Muhammad Muqeet Akram",role:"Mission specialist",prior:205,drift:{exercise:-.35,compliance:-.14,backpain:1.2}},
+  {id:"haddad",name:"Mahnoor Safdar",role:"Systems engineer",prior:200,drift:{temp:.012,crp:1.4,spo2:-.015,hr:.12}}
+];
+const COMMS = {
+  leo:{esc:`Call the flight surgeon now.`,auto:null},
+  moon:{esc:`Call the flight surgeon. Expect a short delay on each reply.`,auto:`Link delay is a few seconds. Live calls still work.`},
+  mars:{esc:`Queue a report for ground and follow the on-board protocol meanwhile.`,auto:`Autonomy mode: replies from ground can take up to 44 minutes round trip. Act on the steps below first, then send the report.`}
+};
+
+function hash(s){let h=1779033703^s.length;for(let i=0;i<s.length;i++){h=Math.imul(h^s.charCodeAt(i),3432918353);h=h<<13|h>>>19}return h>>>0}
+function mulberry(a){return function(){a|=0;a=a+0x6D2B79F5|0;let t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296}}
+function gauss(r){let u=0;while(!u)u=r();const v=r();return Math.sqrt(-2*Math.log(u))*Math.cos(2*Math.PI*v)}
+function fit(m,v){if(m.min!==undefined)v=Math.max(m.min,v);if(m.max!==undefined)v=Math.min(m.max,v);return +v.toFixed(m.dec)}
+
+function seed(){
+  const series={};
+  CREW.forEach(c=>{series[c.id]={};METRICS.forEach(m=>{
+    const r=mulberry(hash(c.id+m.id)),d=c.drift[m.id]||0,arr=[];
+    for(let i=0;i<N;i++){const t=i/(N-1);arr.push(fit(m,m.base*(1+d*t*t+m.noise*gauss(r))))}
+    series[c.id][m.id]=arr})});
+  return {series,day:125,crew:CREW[0].id,comms:state?state.comms:"leo"};
+}
+let state=null; state=seed();
+
+function evalM(m,v){
+  const dev=(v-m.base)/m.base, b=m.bad==="high"?dev:m.bad==="low"?-dev:Math.abs(dev);
+  let s;
+  if(b<=0)s=100; else if(b<m.warn)s=100-15*b/m.warn;
+  else if(b<m.crit)s=85-30*(b-m.warn)/(m.crit-m.warn);
+  else s=55-Math.min(40,40*(b-m.crit)/m.crit);
+  return {b,s,level:b>=m.crit?2:b>=m.warn?1:0};
+}
+const blend=a=>0.6*(a.reduce((x,y)=>x+y,0)/a.length)+0.4*Math.min(...a);
+const lvOfScore=s=>s>=80?0:s>=60?1:2;
+
+function summarize(c){
+  const ser=state.series[c.id];
+  const domains=DOMAINS.map(d=>{
+    const ms=METRICS.filter(m=>m.domain===d.id).map(m=>{
+      const arr=ser[m.id],v=arr[arr.length-1],e=evalM(m,v);return {m,arr,v,...e}});
+    const score=blend(ms.map(x=>x.s));
+    return {d,ms,score,level:Math.max(...ms.map(x=>x.level))};
+  });
+  const overall=blend(domains.map(x=>x.score));
+  const alerts=domains.flatMap(x=>x.ms).filter(x=>x.level>0).sort((a,b)=>b.level-a.level||b.b-a.b);
+  return {domains,overall,alerts};
+}
+
+function spark(arr,m,level){
+  const w=96,h=34,p=4,lo=Math.min(...arr,m.base),hi=Math.max(...arr,m.base),span=(hi-lo)||1;
+  const x=i=>p+i*(w-2*p)/(arr.length-1), y=v=>h-p-(v-lo)/span*(h-2*p);
+  const pts=arr.map((v,i)=>x(i).toFixed(1)+","+y(v).toFixed(1)).join(" ");
+  const area=`${x(0).toFixed(1)},${h-p} ${pts} ${x(arr.length-1).toFixed(1)},${h-p}`;
+  return `<svg viewBox="0 0 ${w} ${h}" role="img" aria-label="14 day trend for ${m.label}" style="color:var(--${LV[level]==="ok"?"ok":LV[level]==="watch"?"warn":"crit"})">
+    <polygon points="${area}" fill="currentColor" opacity=".12"/>
+    <line x1="${p}" x2="${w-p}" y1="${y(m.base).toFixed(1)}" y2="${y(m.base).toFixed(1)}" stroke="var(--muted)" stroke-width="1" stroke-dasharray="3 3"/>
+    <polyline points="${pts}" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round"/>
+    <circle cx="${x(arr.length-1).toFixed(1)}" cy="${y(arr[arr.length-1]).toFixed(1)}" r="3" fill="currentColor"/></svg>`;
+}
+const fmt=(m,v)=>v.toFixed(m.dec);
+const sgn=(m,d)=>(d>0?"+":d<0?"−":"±")+Math.abs(d).toFixed(m.dec);
+
+function render(){
+  const cur=CREW.find(c=>c.id===state.crew), sums={};
+  CREW.forEach(c=>sums[c.id]=summarize(c));
+  const S=sums[cur.id];
+
+  document.getElementById("crew").innerHTML=CREW.map(c=>{
+    const s=sums[c.id],lv=lvOfScore(s.overall);
+    return `<button class="crewbtn" type="button" data-crew="${c.id}" aria-pressed="${c.id===cur.id}">
+      <span class="nm">${c.name}</span><span class="rl">${c.role}</span>
+      <span class="row"><span class="score c-${LV[lv]}">${Math.round(s.overall)}</span>
+      <span class="pill ${s.alerts.length?(s.alerts.some(a=>a.level===2)?"act":"watch"):"ok"}">${s.alerts.length?s.alerts.length+" to review":"All clear"}</span></span></button>`}).join("");
+
+  const lv=lvOfScore(S.overall), flagged=new Set(S.alerts.map(a=>a.m.domain)).size;
+  const dose=state.series[cur.id].dose.reduce((a,b)=>a+b,0)+cur.prior;
+  document.getElementById("summary").innerHTML=`
+    <div><div class="big"><span class="n c-${LV[lv]}">${Math.round(S.overall)}</span><span class="l c-${LV[lv]}">${LVL[lv]}</span></div>
+    <div class="sub" style="color:var(--muted)">${cur.name} · mission day ${state.day}</div>
+    <div class="sub" style="color:var(--muted)">${S.alerts.length?`${S.alerts.length} indicator${S.alerts.length>1?"s":""} to review in ${flagged} domain${flagged>1?"s":""}`:"Every indicator is near baseline"}</div></div>
+    <div class="chips">${S.domains.map(x=>`<div class="chip"><div class="t">${x.d.name}</div><div class="v c-${LV[lvOfScore(x.score)]}">${Math.round(x.score)}</div></div>`).join("")}</div>`;
+
+  document.getElementById("domains").innerHTML=S.domains.map(x=>`
+    <section class="panel dom"><header><div><h3>${x.d.name}</h3><p class="hint">${x.d.hint}</p></div>
+    <span class="pill ${LV[x.level]}">${LVL[x.level]}</span></header>
+    ${x.ms.map(r=>`<div class="m">
+      <div><div class="lab">${r.m.label}</div><div class="base num">baseline ${fmt(r.m,r.m.base)}</div></div>
+      <div class="val">${fmt(r.m,r.v)} <small>${r.m.unit}</small></div>
+      ${spark(r.arr,r.m,r.level)}
+      <div class="dl num c-${LV[r.level]}">${sgn(r.m,r.v-r.m.base)} vs baseline · ${LVL[r.level]}</div></div>`).join("")}
+    ${x.d.id==="radiation"?`<div class="dose-bar"><div class="num">Mission total ${Math.round(dose)} of 400 mSv (illustrative budget)</div><div class="track"><div class="fill" style="width:${Math.min(100,dose/4)}%"></div></div></div>`:""}
+    </section>`).join("");
+
+  const cm=COMMS[state.comms];
+  document.getElementById("actions").innerHTML=`<h2>Next steps</h2>
+    <p class="sub">Ranked for ${cur.name}.</p>
+    ${S.alerts.length?`<ol>${S.alerts.map(a=>`<li class="${LV[a.level]}"><div class="top"><span class="what">${a.m.label}: ${fmt(a.m,a.v)} ${a.m.unit}</span><span class="pill ${LV[a.level]}">${LVL[a.level]}</span></div>
+      <p>${ACTIONS[a.m.id][a.level-1]}</p>${a.level===2?`<div class="esc">${cm.esc}</div>`:""}</li>`).join("")}</ol>`
+      :`<p class="empty">No action needed. Keep up the daily routine.</p>`}
+    ${cm.auto?`<div class="autonomy">${cm.auto}</div>`:""}`;
+}
+
+function syncForm(){
+  const ser=state.series[state.crew], last=id=>ser[id][ser[id].length-1];
+  ["sleep","mood","stress","exercise","temp","backpain"].forEach(id=>{
+    const el=document.getElementById("f-"+id), m=METRICS.find(x=>x.id===id);
+    el.value=last(id); document.getElementById("o-"+id).textContent=(+el.value).toFixed(m.dec)});
+}
+function advance(over){
+  const r=Math.random;
+  CREW.forEach(c=>METRICS.forEach(m=>{
+    const arr=state.series[c.id][m.id],last=arr[arr.length-1];
+    const o=over&&over[c.id]&&over[c.id][m.id]!==undefined?over[c.id][m.id]:(over&&over.all&&over.all[m.id]!==undefined?over.all[m.id]:fit(m,last*(1+m.noise*0.5*(r()*2-1))));
+    arr.push(fit(m,o));arr.shift()}));
+  state.day++;
+}
+
+document.getElementById("crew").addEventListener("click",e=>{
+  const b=e.target.closest("[data-crew]");if(!b)return;state.crew=b.dataset.crew;render();syncForm()});
+document.getElementById("comms").addEventListener("change",e=>{state.comms=e.target.value;render()});
+document.getElementById("spe").addEventListener("click",()=>{advance({all:{dose:+(1.4*2.8).toFixed(2)}});render();syncForm()});
+document.getElementById("reset").addEventListener("click",()=>{state=seed();document.getElementById("comms").value=state.comms;render();syncForm()});
+["sleep","mood","stress","exercise","temp","backpain"].forEach(id=>{
+  const m=METRICS.find(x=>x.id===id);
+  document.getElementById("f-"+id).addEventListener("input",e=>{document.getElementById("o-"+id).textContent=(+e.target.value).toFixed(m.dec)})});
+document.getElementById("checkin").addEventListener("submit",e=>{
+  e.preventDefault();
+  const over={};over[state.crew]={};
+  ["sleep","mood","stress","exercise","temp","backpain"].forEach(id=>{over[state.crew][id]=parseFloat(document.getElementById("f-"+id).value)});
+  advance(over);render();syncForm();
+});
+render();syncForm();
+</script>
+</body>
+</html>
